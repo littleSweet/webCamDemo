@@ -1,0 +1,114 @@
+﻿<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>jQuery-webcam-js</title>
+<!-- <link href="cs.css" rel="stylesheet" type="text/css">-->
+<script src="js/jquery.min.js"></script>
+<script src="js/jquery.webcam.min.js"></script>
+</head>
+<body>
+	<button class="play">拍照1</button>
+	<div id="status">倒计时</div>
+	<div id="webcam"></div>
+	<div id="photos">
+		<img src="" id="img">
+	</div>
+
+</body>
+<script>
+	var w = 320, h = 240;
+	var pos = 0, ctx = null, saveCB, image = [], image_data = [];
+
+	var canvas = document.createElement("canvas");
+	if (canvas) {
+		canvas.setAttribute('width', w);
+		canvas.setAttribute('height', h);
+	}
+
+	if (false && canvas && canvas.toDataURL) {
+		ctx = canvas.getContext("2d");
+		image = ctx.getImageData(0, 0, w, h);
+		saveCB = function(data) {
+			var col = data.split(";");
+			var img = image;
+            console.log('===in chrome');
+			for (var i = 0; i < w; i++) {
+				var tmp = parseInt(col[i]);
+				img.data[pos + 0] = (tmp >> 16) & 0xff;
+				img.data[pos + 1] = (tmp >> 8) & 0xff;
+				img.data[pos + 2] = tmp & 0xff;
+				img.data[pos + 3] = 0xff;
+				pos += 4;
+			}
+			if (pos >= 4 * w * h) {
+                //console.log('2 chrom pos: '+pos + ' >= 4*w*h: '+4*w*h);
+				ctx.putImageData(img, 0, 0);
+				$.post("/vpr/upload/face", {
+					type : "data",
+					file : canvas.toDataURL("image/png")
+				}, function(msg) {
+					console.log(msg);
+					pos = 0;
+					$("#img").attr("src", "/webcam/" + msg);
+				});
+			}
+		};
+
+	} else {
+		saveCB = function(data) {
+            console.log('===in ie');			
+			image_data.push(data);
+			pos += 4 * w;			
+			if (pos >= 4 * w * h) {
+	            //console.log('ie8 pos: '+pos + ' >= 4*w*h: '+4*w*h);
+				$.post("/vpr/upload/face", {
+					type : "pixel",
+					width : w,
+					height : h,
+					file : image_data.join(';')
+				}, function(msg) {
+					console.log(msg);
+					pos = 0;
+					$("#img").attr("src", "/webcam/" + msg);
+				});
+			}
+		};
+	}
+
+	$("#webcam").webcam({
+		width : w,
+		height : h,
+		mode : "callback", //stream,save，回调模式,流模式和保存模式
+		swffile : "swf/jscam_canvas_only.swf",
+		onTick : function(remain) {
+			console.log('===remain: '+remain);
+			if (0 == remain) {
+				$("#status").text("拍照成功!");
+			} else {
+				$("#status").text("倒计时" + remain + "秒钟...");
+			}
+		},
+
+		onSave : saveCB,
+		onCapture : function() { //捕获图像
+			webcam.save();
+		},
+		debug : function(type, string) { //控制台信息
+			console.log(type + ": " + string);
+		},
+		onLoad : function() { //flash 加载完毕执行
+			console.log('加载完毕！')
+			var cams = webcam.getCameraList();
+			for ( var i in cams) {
+				$("body").append("<p>" + cams[i] + "</p>");
+			}
+		}
+	});
+
+	$(".play").click(function() {
+		image_data = [];
+		webcam.capture(1); //拍照，参数1是倒计时
+	});
+</script>
+</html>
